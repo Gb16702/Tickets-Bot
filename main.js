@@ -1,39 +1,40 @@
+const loadCommands = require("./loaders/loadCommands");
+const loadEvents = require("./loaders/loadEvents");
 const {
   Client,
-  GatewayIntentBits,
   EmbedBuilder,
   ButtonBuilder,
   ActionRowBuilder,
   ButtonStyle,
   ChannelType,
   PermissionsBitField,
+  IntentsBitField,
+  Collection,
 } = require("discord.js");
 
 require("dotenv").config();
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildPresences,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ],
+  intents: new IntentsBitField(53608447)
 });
 
-const { VIP_ROLE_ID, MOD_ROLE_ID, BYPASS_ROLE_ID, CHANNEL_ID, MEMBER_COUNT_CHANNEL_ID, TICKET_CHANNEL_ID, MODERATION_CATEGORY_ID } = process.env;
+client.commands = new Collection();
+
+(async () => {
+    await loadCommands(client);
+    await loadEvents(client);
+    await client.login(process.env.TOKEN);
+})();
+
+const { VIP_ROLE_ID, MOD_ROLE_ID, BYPASS_ROLE_ID, TICKET_CHANNEL_ID, MODERATION_CATEGORY_ID } = process.env;
 
 const activeTickets = new Map();
 
 client.once("ready", async () => {
-  console.log("Ready");
-
   const guild = client.guilds.cache.first();
-  const memberCountChannel = guild.channels.cache.get(MEMBER_COUNT_CHANNEL_ID);
   const ticketChannel = guild.channels.cache.get(TICKET_CHANNEL_ID);
 
   if (!ticketChannel) return console.error("Le salon permettant de créer des tickets est introuvable");
-  if (!memberCountChannel) return console.error("Le salon vocal permettant de connaitre le nombre de membres est introuvable");
 
   const ticketButton = new ButtonBuilder().setCustomId("create_ticket").setLabel("Créer un ticket").setStyle(ButtonStyle.Primary);
   const embed = new EmbedBuilder()
@@ -54,34 +55,13 @@ client.once("ready", async () => {
       components: [row],
     });
   }
-
-  const updateMemberCount = async () => {
-    try {
-      await guild.members.fetch();
-      const memberCount = guild.memberCount;
-      await memberCountChannel.setName(`Membres : ${memberCount}`);
-      console.log(`Le salon a été mis à jour avec ${memberCount} membres`);
-    } catch (error) {
-      console.error("Erreur lors de la mise à jour du nombre de membres : ", error);
-    }
-  };
-
-  await updateMemberCount();
-
-  setInterval(updateMemberCount, 1000 * 60 * 60 * 6);
-
-  if (guild) {
-    console.log("Les membres sont maintenant en cache.");
-  } else {
-    console.error("Serveur non trouvé.");
-  }
 });
 
 client.on("guildMemberUpdate", (oldMember, newMember) => {
   if (!oldMember.roles.cache.has(VIP_ROLE_ID) && newMember.roles.cache.has(VIP_ROLE_ID)) {
     newMember.roles.add(BYPASS_ROLE_ID).catch(console.error);
 
-    const channel = client.channels.cache.get(CHANNEL_ID);
+    const channel = client.channels.cache.get(GUILD_ID);
     if (channel) {
       channel
         .send(`Tu as reçu le rôle Bypass suite à l'obtention du rôle VIP <@${newMember.user.id}>.`)
@@ -184,5 +164,3 @@ client.on("messageCreate", (message) => {
     }
   }
 });
-
-client.login(process.env.CLIENT_SERCRET);
