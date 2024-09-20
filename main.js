@@ -11,22 +11,23 @@ const {
   IntentsBitField,
   Collection,
 } = require("discord.js");
+const cron = require("node-cron");
 
 require("dotenv").config();
 
 const client = new Client({
-  intents: new IntentsBitField(53608447)
+  intents: new IntentsBitField(53608447),
 });
 
 client.commands = new Collection();
 
 (async () => {
-    await loadCommands(client);
-    await loadEvents(client);
-    await client.login(process.env.TOKEN);
+  await loadCommands(client);
+  await loadEvents(client);
+  await client.login(process.env.TOKEN);
 })();
 
-const { VIP_ROLE_ID, MOD_ROLE_ID, BYPASS_ROLE_ID, TICKET_CHANNEL_ID, MODERATION_CATEGORY_ID } = process.env;
+const { VIP_ROLE_ID, MOD_ROLE_ID, GUILD_ID, BYPASS_ROLE_ID, TICKET_CHANNEL_ID, MODERATION_CATEGORY_ID } = process.env;
 
 const activeTickets = new Map();
 
@@ -75,26 +76,59 @@ client.on("guildMemberUpdate", (oldMember, newMember) => {
   }
 });
 
-const closeAfterTimeout = (channel) => {
-  const timeout = setTimeout(async () => {
-    if (channel) {
-      await channel.send("Le ticket va être fermé car aucune interaction n'a eu lieu dans les 48 heures.");
-      channel.delete().catch(console.error);
-      activeTickets.delete(channel.id);
-    }
-  }, 1000 * 60 * 60 * 48);
+cron.schedule("0 * * * *", async () => {
+  console.log("[Tâche cron] => Vérification des tickets inactifs");
 
-  activeTickets.set(channel.id, timeout);
-};
+  for (const [channelId, lastMessageTime] of activeTickets.entries()) {
+    const now = Date.now();
+    const timeSinceLastMessage = now - lastMessageTime;
+
+    console.log(`Ticket ${channelId} - Temps depuis le dernier message : ${timeSinceLastMessage / 1000 / 60 / 60} heures`);
+
+    const channel = client.channels.cache.get(channelId);
+
+    if (channel && channel.parentId === MODERATION_CATEGORY_ID) {
+      if (timeSinceLastMessage > 1000 * 60 * 60 * 48) {
+        console.log(`Suppression du salon ${channelId} pour inactivité.`);
+        await channel.delete().catch(console.error);
+        activeTickets.delete(channelId);
+      }
+    } else {
+      console.log(`Le salon ${channelId} n'est pas un ticket support, il ne sera pas supprimé.`);
+    }
+  }
+});
 
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
 
-  if (interaction.customId === "create_ticket") {
-    const { guild, user } = interaction;
+  const { guild, user } = interaction;
 
+  if (interaction.customId === "create_ticket") {
+    const sanitizedUsername = user.username.replace(/[^a-zA-Z0-9]/g, "");
+    const existingChannel = guild.channels.cache
+      .filter((channel) => channel.name.includes(sanitizedUsername) && channel.parentId === MODERATION_CATEGORY_ID)
+      .first();
+
+    if (existingChannel) {
+      return interaction.reply({
+        content: "Tu as déjà un ticket ouvert. Ferme-le avant d'en créer un nouveau.",
+        ephemeral: true,
+      });
+    }
+
+    const now = new Date();
+    const formattedDate = `${now.getDate().toString().padStart(2, "0")}${(now.getMonth() + 1).toString().padStart(2, "0")}${now
+      .getFullYear()
+      .toString()
+      .slice(2)}${now.getHours().toString().padStart(2, "0")}${now.getMinutes().toString().padStart(2, "0")}${now
+      .getSeconds()
+      .toString()
+      .padStart(2, "0")}`;
+
+    const channelName = `${formattedDate}-${user.username}`;
     const channel = await guild.channels.create({
-      name: `ticket-${user.username}`,
+      name: `${channelName}`,
       type: ChannelType.GuildText,
       parent: MODERATION_CATEGORY_ID,
       permissionOverwrites: [
@@ -118,7 +152,19 @@ client.on("interactionCreate", async (interaction) => {
     const embed = new EmbedBuilder()
       .setColor("Red")
       .setTitle("Ticket d'assistance")
-      .setDescription(`Bonjour <@${user.id}>, un modérateur te répondra bientôt.`);
+      .setDescription(`Bonjour <@${user.id}>, parle-nous de ton problème et un admin te répondra`)
+      .setFooter({
+        text: `Créé le ${new Date().toLocaleString("fr-FR", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })} à ${new Date()
+          .toLocaleString("fr-FR", {
+            hour: "numeric",
+            minute: "numeric",
+          })
+          .replace(":", "H")}`,
+      });
 
     const row = new ActionRowBuilder().addComponents(closeButton);
 
@@ -131,36 +177,22 @@ client.on("interactionCreate", async (interaction) => {
       content: "Le ticket a été créé avec succès.",
       ephemeral: true,
     });
-
-    closeAfterTimeout(channel);
   }
 
   if (interaction.customId === "close_ticket") {
-    const { channel } = interaction;
+    const { channel, member, user } = interaction;
 
-    if (channel.name.startsWith("ticket-")) {
+    const modRole = interaction.guild.roles.cache.get(MOD_ROLE_ID);
+
+    if (
+      (channel.name.endsWith(user.username) || member.roles.highest.comparePositionTo(modRole) >= 0) &&
+      channel.parentId === MODERATION_CATEGORY_ID
+    ) {
       await interaction.reply({ content: "Le ticket va être fermé dans 5 secondes.", ephemeral: true });
-      clearTimeout(activeTickets.get(channel.id));
-      setTimeout(() => channel.delete(), 5000);
       activeTickets.delete(channel.id);
+      setTimeout(() => channel.delete(), 5000);
     } else {
-      interaction.reply({ content: "Tu ne peux pas fermer ce salon.", ephemeral: true });
-    }
-  }
-});
-
-client.on("messageCreate", (message) => {
-  const channel = message.channel;
-
-  if (channel.name.startsWith("ticket-")) {
-    const userId = channel.name.split("-")[1];
-    const modRole = message.guild.roles.cache.get(MOD_ROLE_ID);
-
-    if (message.member.roles.highest.comparePositionTo(modRole) >= 0 && message.author.id !== userId) {
-      if (activeTickets.has(channel.id)) {
-        clearTimeout(activeTickets.get(channel.id));
-        closeAfterTimeout(channel);
-      }
+      interaction.reply({ content: "Tu n'as pas la permission de fermer ce salon.", ephemeral: true });
     }
   }
 });
