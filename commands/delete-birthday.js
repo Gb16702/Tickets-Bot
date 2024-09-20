@@ -2,7 +2,7 @@ const { SlashCommandBuilder } = require("discord.js");
 const pool = require("../config/db");
 
 module.exports = {
-  data: new SlashCommandBuilder().setName("delete-birthday").setDescription("Supprime ta date d'anniversaire"),
+  data: new SlashCommandBuilder().setDefaultMemberPermissions(0).setName("delete-birthday").setDescription("Supprime ta date d'anniversaire"),
 
   async execute(interaction) {
     try {

@@ -4,6 +4,7 @@ const verifyDate = require("../utils/verify-date");
 
 module.exports = {
   data: new SlashCommandBuilder()
+    .setDefaultMemberPermissions(0)
     .setName("remember-birthday")
     .setDescription("Mémorise ta date d'anniversaire")
     .addStringOption((option) => option.setName("date").setDescription("Entre ta date d'anniversaire au format YYYY-MM-DD").setRequired(true))

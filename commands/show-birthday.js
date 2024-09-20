@@ -6,6 +6,7 @@ const { formatDistanceStrict, addMonths, setYear, isBefore, differenceInDays } =
 
 module.exports = {
   data: new SlashCommandBuilder()
+    .setDefaultMemberPermissions(0)
     .setName("show-birthday")
     .setDescription("Affiche ta date d'anniversaire si tu l'as enregistrée et celles des membres à venir."),
 
