@@ -12,6 +12,7 @@ const {
   Collection,
 } = require("discord.js");
 const cron = require("node-cron");
+const loadModals = require("./loaders/loadModals");
 
 require("dotenv").config();
 
@@ -23,7 +24,8 @@ client.commands = new Collection();
 
 (async () => {
   await loadCommands(client);
-  await loadEvents(client);
+  loadEvents(client);
+  loadModals(client);
   await client.login(process.env.TOKEN);
 })();
 
