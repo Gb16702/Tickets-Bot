@@ -13,6 +13,7 @@ const {
 } = require("discord.js");
 const cron = require("node-cron");
 const loadModals = require("./loaders/loadModals");
+const { DateTime } = require("luxon");
 
 require("dotenv").config();
 
@@ -79,33 +80,24 @@ client.once("ready", async () => {
   });
 
   function createStatusEmbed(status, isRemote) {
+    const now = DateTime.now().setZone('Europe/Brussels');
+    const today = DateTime.now().setZone('Europe/Brussels').startOf('day');
+
+    let formattedTime;
+
+    if (now.hasSame(today, 'day')) {
+      formattedTime = `Aujourd'hui à ${now.toFormat('HH:mm')}`;
+    } else {
+      formattedTime = `Le ${now.toFormat('dd/MM/yyyy à HH:mm')}`;
+    }
+
     return new EmbedBuilder()
       .setTitle("Statut du Bot")
       .setColor(status === "en ligne" ? "#51FC17" : "Red")
       .setDescription(statusText(status, isRemote))
       .setFooter({
-        text: `Dernière vérification : ${getFormattedDate()}`,
+        text: `Dernière vérification : ${formattedTime}`,
       });
-  }
-
-  function getFormattedDate() {
-    const now = new Date();
-    const today = new Date();
-
-    if (now.getDate() === today.getDate() && now.getMonth() === today.getMonth() && now.getFullYear() === today.getFullYear()) {
-      return `Aujourd'hui à ${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
-    } else {
-      return `Le ${now.toLocaleString("fr-FR", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      })} à ${now
-        .toLocaleString("fr-FR", {
-          hour: "numeric",
-          minute: "numeric",
-        })
-        .replace(":", "H")}`;
-    }
   }
 
   function statusText(status, isRemote) {
