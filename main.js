@@ -33,18 +33,99 @@ const { VIP_ROLE_ID, MOD_ROLE_ID, GUILD_ID, BYPASS_ROLE_ID, TICKET_CHANNEL_ID, M
 
 const activeTickets = new Map();
 
+let statusMessageId = null;
+let statusChannel = null;
+const environment = process.env.ENV ?? "dev";
+const isRemote = environment === "prod";
+
 client.once("ready", async () => {
   const guild = client.guilds.cache.first();
   const ticketChannel = guild.channels.cache.get(TICKET_CHANNEL_ID);
 
   if (!ticketChannel) return console.error("Le salon permettant de créer des tickets est introuvable");
 
+  statusChannel = guild.channels.cache.get(process.env.SERVER_STATUS_ID);
+  if (!statusChannel) return console.error("Le salon permettant de vérifier le statut du bot est introuvable");
+
+  const fetchedMessages = await statusChannel.messages.fetch({ limit: 1 });
+  const existingStatusMessage = fetchedMessages.first();
+  const initialStatus = client.ws.status === 0 ? "en ligne" : "hors ligne";
+  const initialEmbed = createStatusEmbed(initialStatus, isRemote);
+
+  if (existingStatusMessage) {
+    statusMessageId = existingStatusMessage.id;
+    await existingStatusMessage.edit({ embeds: [initialEmbed] });
+    console.log("Le statut du bot a été mis à jour.");
+
+  } else {
+    const message = await statusChannel.send({ embeds: [initialEmbed] });
+    statusMessageId = message.id;
+    console.log("Le statut du bot a été créé.");
+  }
+
+  cron.schedule("*/1 * * * *", async () => {
+    console.log("[Tâche cron] => vérification du statut du bot");
+    const status = client.ws.status === 0 ? "en ligne" : "hors ligne";
+    const updatedEmbed = createStatusEmbed(status, isRemote);
+
+    try {
+      const fetchedMessage = await statusChannel.messages.fetch(statusMessageId);
+      if (fetchedMessage) {
+        await fetchedMessage.edit({ embeds: [updatedEmbed] });
+      }
+    } catch (error) {
+      console.error("[Erreur] => lors de la mise à jour de l'état du bot :", error);
+    }
+  });
+
+  function createStatusEmbed(status, isRemote) {
+    return new EmbedBuilder()
+      .setTitle("Statut du Bot")
+      .setColor(status === "en ligne" ? "#51FC17" : "Red")
+      .setDescription(statusText(status, isRemote))
+      .setFooter({
+        text: `Dernière vérification : ${getFormattedDate()}`,
+      });
+  }
+
+  function getFormattedDate() {
+    const now = new Date();
+    const today = new Date();
+
+    if (now.getDate() === today.getDate() && now.getMonth() === today.getMonth() && now.getFullYear() === today.getFullYear()) {
+      return `Aujourd'hui à ${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+    } else {
+      return `Le ${now.toLocaleString("fr-FR", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })} à ${now
+        .toLocaleString("fr-FR", {
+          hour: "numeric",
+          minute: "numeric",
+        })
+        .replace(":", "H")}`;
+    }
+  }
+
+  function statusText(status, isRemote) {
+    if (status === "en ligne") {
+      return isRemote
+        ? "<a:online:1291046453124399186> Le bot est en **ligne**. Tous les services sont **opérationnels**"
+        : "<a:maintenance:1291046424317923368> Le bot est en **maintenance**. Certains services **pourraient** ne pas fonctionner";
+    } else {
+      return "<a:offline:1291046453124399186> Le bot est **hors** ligne. Les services ne sont **pas** opérationnels";
+    }
+  }
+
   const ticketButton = new ButtonBuilder().setCustomId("create_ticket").setLabel("Créer un ticket").setStyle(ButtonStyle.Primary);
   const embed = new EmbedBuilder()
     .setColor("#5764F2")
-    .setTitle("Contacter un Modérateur")
+    .setTitle("Ouvrir un ticket avec le staff")
     .setDescription(
-      "Tu as besoin d'aide ?\n" + "Section réservée aux demandes **nécéssitant un modérateur**.\n\n" + "⚠️  Tout ticket inutile sera **sanctionné !**"
+      "Tu as besoin d'aide ?\n" +
+        "Section réservée aux demandes nécessitant un **modérateur**. Tout ticket inutile sera **sanctionné !**\n\n" +
+        `-# Vérifie le **statut** du bot dans le salon <#${process.env.SERVER_STATUS_ID}> avant d'en ouvrir un.`
     );
 
   const row = new ActionRowBuilder().addComponents(ticketButton);
@@ -57,6 +138,20 @@ client.once("ready", async () => {
       embeds: [embed],
       components: [row],
     });
+  }
+});
+
+client.on("disconnect", async () => {
+  console.log("Le bot a été déconnecté.");
+  const updatedEmbed = createStatusEmbed("hors ligne", isRemote);
+
+  try {
+    const fetchedMessage = await statusChannel.messages.fetch(statusMessageId);
+    if (fetchedMessage) {
+      await fetchedMessage.edit({ embeds: [updatedEmbed] });
+    }
+  } catch (error) {
+    console.error("[Erreur] => lors de la mise à jour de l'état 'hors ligne' du bot :", error);
   }
 });
 
