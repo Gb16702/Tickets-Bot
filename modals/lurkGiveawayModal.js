@@ -44,8 +44,8 @@ module.exports = {
           name: "\u200B",
           value: `
           - **Hôte** du Giveaway : <@${interaction.user.id}>\n
-          - Les **${participantsCount.toString()}** membres possédant le rôle <@&${process.env.LURK_ROLE_ID}> y sont éligibles\n
-          - **${numberOfWinners}** tirage${numberOfWinners > 1 ? "s" : ""}, soit **${probability}%** de chance d'être tiré au sort`,
+- Les **${participantsCount.toString()}** membres possédant le rôle <@&${process.env.LURK_ROLE_ID}> y sont éligibles\n
+- **${numberOfWinners}** tirage${numberOfWinners > 1 ? "s" : ""}, soit **${probability}%** de chance d'être tiré au sort`,
           inline: false,
         })
         .setFooter({
