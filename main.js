@@ -10,6 +10,7 @@ const {
   PermissionsBitField,
   IntentsBitField,
   Collection,
+  userMention,
 } = require("discord.js");
 const cron = require("node-cron");
 const loadModals = require("./loaders/loadModals");
@@ -19,6 +20,9 @@ require("dotenv").config();
 
 const client = new Client({
   intents: new IntentsBitField(53608447),
+  allowedMentions: {
+    parse: ["users"],
+  },
 });
 
 client.commands = new Collection();
@@ -80,15 +84,15 @@ client.once("ready", async () => {
   });
 
   function createStatusEmbed(status, isRemote) {
-    const now = DateTime.now().setZone('Europe/Brussels');
-    const today = DateTime.now().setZone('Europe/Brussels').startOf('day');
+    const now = DateTime.now().setZone("Europe/Brussels");
+    const today = DateTime.now().setZone("Europe/Brussels").startOf("day");
 
     let formattedTime;
 
-    if (now.hasSame(today, 'day')) {
-      formattedTime = `Aujourd'hui à ${now.toFormat('HH:mm')}`;
+    if (now.toFormat("yyyy-MM-dd") === today.toFormat("yyyy-MM-dd")) {
+      formattedTime = `Aujourd'hui à ${now.toFormat("HH:mm")}`;
     } else {
-      formattedTime = `Le ${now.toFormat('dd/MM/yyyy à HH:mm')}`;
+      formattedTime = `Le ${now.toFormat("dd/MM/yyyy à HH:mm")}`;
     }
 
     return new EmbedBuilder()

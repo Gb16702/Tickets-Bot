@@ -1,4 +1,4 @@
-const { Events, InteractionType, EmbedBuilder } = require("discord.js");
+const { Events, InteractionType, EmbedBuilder, userMention } = require("discord.js");
 const drawSessions = require("../../utils/drawSessions");
 
 const ordinalSuffix = (n) => {
@@ -48,39 +48,54 @@ module.exports = {
 
     if (interaction.isButton()) {
       if (interaction.customId === "draw-winner") {
+        await interaction.deferReply();
+
+        const modRole = interaction.guild.roles.cache.get(process.env.MOD_ROLE_ID);
+
+        if (interaction.member.roles.highest.comparePositionTo(modRole) < 0) {
+          return interaction.editReply({
+            content: "Tu n'as pas la permission de faire ça",
+            ephemeral: true,
+          });
+        }
+
         const giveawayId = interaction.message.id;
         const drawSession = drawSessions.getSession(giveawayId);
 
         const excludedUserId = process.env.ME;
 
         if (!drawSession) {
-          return interaction.reply({
+          return interaction.editReply({
             content: "Aucune session de tirage n'est active",
             ephemeral: true,
           });
         }
 
         if (drawSession.remaining <= 0) {
-          return interaction.reply({
-            content: "Le giveaway est terminé. Tous les gagnants ont été sélectionnés.",
+          return interaction.editReply({
+            content: "Le giveaway est terminé. Tous les gagnants ont été sélectionnés",
             ephemeral: true,
           });
         }
 
-        const loadingMessage = await interaction.reply({
-          content: `Un membre va être tiré au sort...`,
+        const lurkRole = interaction.guild.roles.cache.get(process.env.LURK_ROLE_ID);
+        let participants = lurkRole.members.filter((member) => member.roles.cache.has(lurkRole.id) && !drawSession.winners.includes(member.id));
+        console.log(participants.length);
+
+        participants = participants.filter((member) => member.id !== excludedUserId);
+
+        let remainingParticipants = participants.filter((member) => !drawSession.winners.includes(member.id));
+
+        await interaction.editReply({
+          content: `> Un membre parmi les **${remainingParticipants.size}** participants élligibles${
+            drawSession.winners.length > 0 ? " restants" : ""
+          } va être tiré au sort...`,
         });
 
         setTimeout(async () => {
-          const lurkRole = interaction.guild.roles.cache.get(process.env.LURK_ROLE_ID);
-          const members = await interaction.guild.members.fetch();
-          let participants = members.filter((member) => member.roles.cache.has(lurkRole.id) && !drawSession.winners.includes(member.id));
-
-          participants = participants.filter((member) => member.id !== excludedUserId);
-
           if (participants.size === 0) {
             return interaction.followUp({
-              content: "Il n'y a plus de participants à tirer au sort.",
+              content: "Il n'y a plus de participants à tirer au sort",
               ephemeral: true,
             });
           }
@@ -96,23 +111,34 @@ module.exports = {
             ordinalNumber = ordinalSuffix(drawSession.winners.length);
           }
 
-          const congratulationsEmbed = new EmbedBuilder()
-            .setTitle("Nouveau Gagnant !")
-            .setDescription(`||<@${winner.id}>|| a été tiré au sort ! Il s'agit du **${ordinalNumber}** gagnant.`)
-            .setColor("#51FC17");
-
-          await interaction.followUp({
-            embeds: [congratulationsEmbed],
-            ephemeral: false,
+          await interaction.editReply({
+            content: `>>> # Un membre a été **tiré** au sort :\n\n
+**\nID** de l'utilisateur: ||${userMention(winner.id)}||\n
+**Nom** de l'utilisateur : ||${winner.displayName}||\n
+**Tag** de l'utilisateur : ||${winner.user.tag}||\n
+Il s'agit du **${ordinalNumber}** gagnant. ${
+              drawSession.remaining > 0 ? `Il reste **${drawSession.remaining}** membre${drawSession.remaining > 1 ? "s" : ""} à tirer au sort` : ""
+            }`,
           });
-
-          await loadingMessage.delete();
 
           if (drawSession.remaining <= 0) {
             console.log(drawSession.remaining);
 
+            const embedEdit = EmbedBuilder.from(interaction.message.embeds[0]).setColor("#51FC17");
+
             await interaction.message.edit({
               components: [],
+              embeds: [embedEdit],
+            });
+
+            const winners = drawSession.winners.map((winnerId, i) => {
+              const member = interaction.guild.members.cache.get(winnerId);
+              return {
+                index: i + 1,
+                id: member ? member.id : winnerId,
+                username: member.displayName ?? "Inconnu",
+                tag: member.user.tag ?? "Inconnu",
+              };
             });
 
             const embed = new EmbedBuilder()
@@ -122,9 +148,26 @@ module.exports = {
                   drawSession.winners.length > 1 ? "s" : ""
                 }. Voici un récapitulatif de ce Giveaway :`
               )
+              .addFields(
+                {
+                  name: "\u200B",
+                  value: ` **ID**\n\n ${winners.map((winner) => `${userMention(winner.id)}`).join("\n\n")}`,
+                  inline: true,
+                },
+                {
+                  name: "\u200B",
+                  value: `\u00A0**Nom**\n\n ${winners.map((winner) => `${winner.username}`).join("\n\n")}`,
+                  inline: true,
+                },
+                {
+                  name: "\u200B",
+                  value: `\u00A0**Tag**\n\n ${winners.map((winner) => `${winner.tag}`).join("\n\n")}`,
+                  inline: true,
+                }
+              )
               .addFields({
                 name: "\u200B",
-                value: `${drawSession.winners.map((winnerId, i) => `**${i + 1}.**  <@${winnerId}>`).join("\n\n")}`,
+                value: `\n -# ${drawSession.prize ? `Le prix à la clé : **${drawSession.prize}**` : "Le prix de ce giveaway n'a **pas** été défini"}`,
               })
               .setColor("#51FC17");
 
@@ -134,14 +177,16 @@ module.exports = {
 
             drawSessions.deleteSession(giveawayId);
           }
-        }, 2000);
+        }, 1750);
       }
 
       if (interaction.customId === "show-participants") {
         await interaction.deferReply({ ephemeral: true });
 
         const lurkRole = interaction.guild.roles.cache.get(process.env.LURK_ROLE_ID);
-        const members = await interaction.guild.members.fetch();
+
+        const members = await interaction.guild.members.fetch({ force: true });
+        console.log(`Participants récupérés : ${members.size}`);
         const participants = members.filter((member) => member.roles.cache.has(lurkRole.id));
 
         if (participants.size === 0) {
@@ -151,7 +196,7 @@ module.exports = {
           });
         }
 
-        const participantList = Array.from(participants.values()).map((member, i) => `**${i + 1}.** <@${member.id}>`);
+        const participantList = Array.from(participants.values()).map((member, i) => `**${i + 1}.** ${member.displayName}`);
         const fields = [];
 
         for (let i = 0; i < participantList.length; i += 3) {

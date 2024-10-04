@@ -10,6 +10,7 @@ module.exports = {
 
       const title = interaction.fields.getTextInputValue("title");
       const numberOfWinners = interaction.fields.getTextInputValue("numberOfWinners");
+      const prize = interaction.fields.getTextInputValue("prize");
       let description = interaction.fields.getTextInputValue("description");
 
       const lurkRole = interaction.guild.roles.cache.get(process.env.LURK_ROLE_ID);
@@ -44,6 +45,7 @@ module.exports = {
           name: "\u200B",
           value: `
           - **Hôte** du Giveaway : <@${interaction.user.id}>\n
+- ${prize ? `Prix à gagner : **${prize}**` : "Le prix n'a pas été défini"}\n
 - Les **${participantsCount.toString()}** membres possédant le rôle <@&${process.env.LURK_ROLE_ID}> y sont éligibles\n
 - **${numberOfWinners}** tirage${numberOfWinners > 1 ? "s" : ""}, soit **${probability}%** de chance d'être tiré au sort`,
           inline: false,

@@ -65,6 +65,14 @@ module.exports = {
       .setMaxLength(200)
       .setStyle(TextInputStyle.Paragraph);
 
+    const prizeInput = new TextInputBuilder()
+      .setCustomId("prize")
+      .setLabel("Prix")
+      .setPlaceholder("Le prix du giveaway")
+      .setRequired(false)
+      .setMaxLength(200)
+      .setStyle(TextInputStyle.Paragraph);
+
     const numberOfWinnersInput = new TextInputBuilder()
       .setCustomId("numberOfWinners")
       .setLabel("Nombre de gagnants")
@@ -76,9 +84,10 @@ module.exports = {
 
     const firstRow = new ActionRowBuilder().addComponents(titleInput);
     const secondRow = new ActionRowBuilder().addComponents(descriptionInput);
-    const thirdRow = new ActionRowBuilder().addComponents(numberOfWinnersInput);
+    const thirdRow = new ActionRowBuilder().addComponents(prizeInput);
+    const fourthRow = new ActionRowBuilder().addComponents(numberOfWinnersInput);
 
-    modal.addComponents(firstRow, secondRow, thirdRow);
+    modal.addComponents(firstRow, secondRow, thirdRow, fourthRow);
 
     await interaction.showModal(modal);
   },
