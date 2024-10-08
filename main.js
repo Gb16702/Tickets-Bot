@@ -1,5 +1,8 @@
 const loadCommands = require("./loaders/loadCommands");
 const loadEvents = require("./loaders/loadEvents");
+const loadModals = require("./loaders/loadModals");
+const getFormattedDate = require("./utils/getFormattedDate");
+
 const {
   Client,
   EmbedBuilder,
@@ -10,11 +13,8 @@ const {
   PermissionsBitField,
   IntentsBitField,
   Collection,
-  userMention,
 } = require("discord.js");
 const cron = require("node-cron");
-const loadModals = require("./loaders/loadModals");
-const { DateTime } = require("luxon");
 
 require("dotenv").config();
 
@@ -61,7 +61,6 @@ client.once("ready", async () => {
     statusMessageId = existingStatusMessage.id;
     await existingStatusMessage.edit({ embeds: [initialEmbed] });
     console.log("Le statut du bot a été mis à jour.");
-
   } else {
     const message = await statusChannel.send({ embeds: [initialEmbed] });
     statusMessageId = message.id;
@@ -84,24 +83,14 @@ client.once("ready", async () => {
   });
 
   function createStatusEmbed(status, isRemote) {
-    const now = DateTime.now().setZone("Europe/Brussels");
-    const today = DateTime.now().setZone("Europe/Brussels").startOf("day");
-
-    let formattedTime;
-
-    if (now.toFormat("yyyy-MM-dd") === today.toFormat("yyyy-MM-dd")) {
-      formattedTime = `Aujourd'hui à ${now.toFormat("HH:mm")}`;
-    } else {
-      formattedTime = `Le ${now.toFormat("dd/MM/yyyy à HH:mm")}`;
-    }
-
     return new EmbedBuilder()
       .setTitle("Statut du Bot")
       .setColor(status === "en ligne" ? "#51FC17" : "Red")
       .setDescription(statusText(status, isRemote))
       .setFooter({
-        text: `Dernière vérification : ${formattedTime}`,
-      });
+        text: "Dernière vérification",
+      })
+      .setTimestamp();
   }
 
   function statusText(status, isRemote) {
@@ -210,16 +199,7 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    const now = new Date();
-    const formattedDate = `${now.getDate().toString().padStart(2, "0")}${(now.getMonth() + 1).toString().padStart(2, "0")}${now
-      .getFullYear()
-      .toString()
-      .slice(2)}${now.getHours().toString().padStart(2, "0")}${now.getMinutes().toString().padStart(2, "0")}${now
-      .getSeconds()
-      .toString()
-      .padStart(2, "0")}`;
-
-    const channelName = `${formattedDate}-${user.username}`;
+    const channelName = `${Date.now()}-${user.username}`;
     const channel = await guild.channels.create({
       name: `${channelName}`,
       type: ChannelType.GuildText,
@@ -247,17 +227,8 @@ client.on("interactionCreate", async (interaction) => {
       .setTitle("Ticket d'assistance")
       .setDescription(`Bonjour <@${user.id}>, parle-nous de ton problème et un admin te répondra`)
       .setFooter({
-        text: `Créé le ${new Date().toLocaleString("fr-FR", {
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-        })} à ${new Date()
-          .toLocaleString("fr-FR", {
-            hour: "numeric",
-            minute: "numeric",
-          })
-          .replace(":", "H")}`,
-      });
+        text: `Créé le`,
+      }).setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(closeButton);
 
