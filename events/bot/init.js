@@ -1,17 +1,7 @@
-const { Events, ActivityType } = require("discord.js");
+const { Events } = require("discord.js");
 const cron = require("node-cron");
 const pool = require("../../config/db");
-
-const updateMemberCount = async (client) => {
-  try {
-    await client.guilds.cache.first().members.fetch();
-    const memberCount = client.guilds.cache.first().memberCount;
-    client.channels.cache.get(process.env.MEMBER_COUNT_CHANNEL_ID).setName(`Membres : ${memberCount}`);
-    client.user.setActivity(`${memberCount} membres`, { type: ActivityType.Watching });
-  } catch (error) {
-    console.error(`[Erreur] lors de la mise à jour du nombre de membres :`, error);
-  }
-};
+const updateMemberCount = require("../../utils/updateMemberCount");
 
 const isBirthdayDate = (date1, date2) => {
   return date1.getDate() === date2.getDate() && date1.getMonth() === date2.getMonth();

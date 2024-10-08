@@ -1,6 +1,6 @@
 const pool = require("../config/db");
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const verifyDate = require("../utils/verify-date");
+const { SlashCommandBuilder } = require("discord.js");
+const verifyDate = require("../utils/verifyDate");
 
 module.exports = {
   data: new SlashCommandBuilder()

@@ -6,7 +6,6 @@ module.exports = {
   async execute(interaction) {
     const { member } = interaction;
     const allowedChannelId = process.env.LURK_CHANNEL_ID;
-    const highestRole = member.roles.highest;
     const modRole = interaction.guild.roles.cache.get(process.env.MOD_ROLE_ID);
 
     if (interaction.channel.id !== allowedChannelId) {
@@ -16,30 +15,7 @@ module.exports = {
       });
     }
 
-    if (!modRole) {
-      return interaction.reply({
-        content: `Le rôle <@&${process.env.MOD_ROLE_ID}> n'a pas été trouvé.`,
-        ephemeral: true,
-      });
-    }
-
-    console.log(highestRole.position, modRole.position);
-
-    if (highestRole.position < modRole.position) {
-      return interaction.reply({
-        content: "Tu n'as pas la permission de faire ça.",
-        ephemeral: true,
-      });
-    }
-
-    if (highestRole.position < process.env.MOD_ROLE_ID.position) {
-      return interaction.reply({
-        content: "Tu n'as pas la permission de faire ça.",
-        ephemeral: true,
-      });
-    }
-
-    if (!member.roles.cache.has(process.env.MOD_ROLE_ID)) {
+    if (member.roles.highest.comparePositionTo(modRole) < 0) {
       return interaction.reply({
         content: "Tu n'as pas la permission de faire ça.",
         ephemeral: true,

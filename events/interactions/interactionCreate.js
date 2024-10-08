@@ -1,5 +1,6 @@
-const { Events, InteractionType, EmbedBuilder, userMention } = require("discord.js");
+const { Events, InteractionType, EmbedBuilder, userMention, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require("discord.js");
 const drawSessions = require("../../utils/drawSessions");
+const { giveaways } = require("../../utils/giveawayData");
 
 const ordinalSuffix = (n) => {
   const ordinals = [
@@ -79,12 +80,16 @@ module.exports = {
         }
 
         const lurkRole = interaction.guild.roles.cache.get(process.env.LURK_ROLE_ID);
-        let participants = lurkRole.members.filter((member) => member.roles.cache.has(lurkRole.id) && !drawSession.winners.includes(member.id));
-        console.log(participants.length);
+        let remainingParticipants = lurkRole.members.filter((member) => {
+          return member.roles.cache.has(process.env.LURK_ROLE_ID) && !drawSession.winners.includes(member.id) && member.id !== excludedUserId;
+        });
 
-        participants = participants.filter((member) => member.id !== excludedUserId);
-
-        let remainingParticipants = participants.filter((member) => !drawSession.winners.includes(member.id));
+        if (remainingParticipants.size === 0) {
+          return interaction.followUp({
+            content: "Il n'y a plus de participants à tirer au sort",
+            ephemeral: true,
+          });
+        }
 
         await interaction.editReply({
           content: `> Un membre parmi les **${remainingParticipants.size}** participants élligibles${
@@ -93,23 +98,12 @@ module.exports = {
         });
 
         setTimeout(async () => {
-          if (participants.size === 0) {
-            return interaction.followUp({
-              content: "Il n'y a plus de participants à tirer au sort",
-              ephemeral: true,
-            });
-          }
-
-          const winner = participants.random();
+          const winner = remainingParticipants.random();
           drawSessions.addWinner(giveawayId, winner.id);
           drawSessions.decrementSession(giveawayId);
 
           let ordinalNumber;
-          if (drawSession.remaining === 0) {
-            ordinalNumber = "dernier";
-          } else {
-            ordinalNumber = ordinalSuffix(drawSession.winners.length);
-          }
+          drawSession.remaining === 0 ? (ordinalNumber = "dernier") : (ordinalNumber = ordinalSuffix(drawSession.winners.length));
 
           await interaction.editReply({
             content: `>>> # Un membre a été **tiré** au sort :\n\n
@@ -122,15 +116,7 @@ Il s'agit du **${ordinalNumber}** gagnant. ${
           });
 
           if (drawSession.remaining <= 0) {
-            console.log(drawSession.remaining);
-
             const embedEdit = EmbedBuilder.from(interaction.message.embeds[0]).setColor("#51FC17");
-
-            await interaction.message.edit({
-              components: [],
-              embeds: [embedEdit],
-            });
-
             const winners = drawSession.winners.map((winnerId, i) => {
               const member = interaction.guild.members.cache.get(winnerId);
               return {
@@ -171,9 +157,7 @@ Il s'agit du **${ordinalNumber}** gagnant. ${
               })
               .setColor("#51FC17");
 
-            await interaction.followUp({
-              embeds: [embed],
-            });
+            await Promise.all([interaction.message.edit({ components: [], embeds: [embedEdit] }), interaction.followUp({ embeds: [embed] })]);
 
             drawSessions.deleteSession(giveawayId);
           }
@@ -184,9 +168,7 @@ Il s'agit du **${ordinalNumber}** gagnant. ${
         await interaction.deferReply({ ephemeral: true });
 
         const lurkRole = interaction.guild.roles.cache.get(process.env.LURK_ROLE_ID);
-
         const members = await interaction.guild.members.fetch({ force: true });
-        console.log(`Participants récupérés : ${members.size}`);
         const participants = members.filter((member) => member.roles.cache.has(lurkRole.id));
 
         if (participants.size === 0) {
@@ -215,6 +197,54 @@ Il s'agit du **${ordinalNumber}** gagnant. ${
 
         await interaction.followUp({
           embeds: [participantsEmbed],
+          ephemeral: true,
+        });
+      }
+
+      if (interaction.customId === "giveaway-join") {
+        const { id: userId } = interaction.user;
+        const giveawayId = `giveaway-${interaction.message.id}`;
+        let participants = giveaways.get(giveawayId);
+
+        if (!participants) {
+          participants = new Set();
+          giveaways.set(giveawayId, participants);
+        }
+
+        if (participants.has(userId)) {
+          const leaveButton = new ButtonBuilder().setCustomId("giveaway-leave").setLabel("Se désinscrire").setStyle(ButtonStyle.Danger);
+
+          const row = new ActionRowBuilder().addComponents(leaveButton);
+
+          return interaction.reply({
+            content: "Tu participes déjà au Giveaway\n\n",
+            components: [row],
+            ephemeral: true,
+          });
+        }
+
+        participants.add(userId);
+
+        const embed = interaction.message.embeds[0];
+        const participantsCount = participants.size;
+
+        const updatedEmbed = EmbedBuilder.from(embed).setColor("#5764F2").setTitle(embed.title).setDescription(`${embed.description}`);
+
+        const fields = updatedEmbed.data.fields;
+        const participantFieldIndex = fields.findIndex((f) => f.value.includes("Participants"));
+
+        if (participantFieldIndex !== -1) {
+          fields[participantFieldIndex].value = `- Nombre de **Participants** : Il y a actuellement **${participantsCount}** participant${
+            participantsCount > 1 ? "s" : ""
+          }`;
+        }
+
+        await interaction.update({
+          embeds: [updatedEmbed],
+        });
+
+        await interaction.followUp({
+          content: ">>> Tu as bien été inscrit au Giveaway",
           ephemeral: true,
         });
       }
